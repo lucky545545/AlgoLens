@@ -79,3 +79,4 @@ export default function HomePage() {
     </div>
   );
 }
+https://gemini.google.com/u/1/app/86e215ee44351e80?pli=1
