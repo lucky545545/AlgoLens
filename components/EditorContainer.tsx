@@ -4,12 +4,20 @@ import { useState } from "react";
 import { Play } from "lucide-react";
 
 export default function EditorContainer({ onRun }: { onRun: (code: string) => void }) {
-  const [code, setCode] = useState("# Write your algorithm here\n\nclass Solution:\n    def solve(self, head):\n        curr = head\n        while curr:\n            print(curr.val)\n            curr = curr.next");
+  const [code, setCode] = useState(`#include<iostream>
+using namespace std;
+
+int main() {
+    // Write your C++ algorithm here
+    int x = 10;
+    cout << x << endl;
+    return 0;
+}`);
 
   return (
     <div className="flex flex-col h-full border-r border-slate-700 bg-[#1e1e1e]">
       <div className="flex justify-between items-center p-2 bg-slate-800">
-        <span className="text-sm font-mono text-slate-300">solution.py</span>
+        <span className="text-sm font-mono text-slate-300">solution.cpp</span>
         <button 
           onClick={() => onRun(code)}
           className="flex items-center gap-2 bg-green-600 hover:bg-green-500 px-4 py-1 rounded text-sm font-bold"
@@ -20,7 +28,7 @@ export default function EditorContainer({ onRun }: { onRun: (code: string) => vo
       <Editor
         height="90vh"
         theme="vs-dark"
-        defaultLanguage="python"
+        defaultLanguage="cpp"
         value={code}
         onChange={(val) => setCode(val || "")}
         options={{ fontSize: 14, minimap: { enabled: false } }}

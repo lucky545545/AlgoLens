@@ -1,0 +1,1 @@
+a = Math.sqrt(a*Math.pow(x,3) + (b*Math.pow(y,8))/(c*x - d));
