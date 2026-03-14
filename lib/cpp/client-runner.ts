@@ -14,6 +14,7 @@ const TRACER_HEADER = `
 #include <iostream>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <string>
 
 namespace __tracer__ {
@@ -63,6 +64,69 @@ public:
     T operator--(int) { T temp = value; value--; return temp; }
     T operator--() { --value; return value; }
 };
+
+template <typename K, typename V>
+inline std::string __map_to_json__(const std::map<K, V>& m) {
+    std::string result = "{";
+    bool first = true;
+    for (auto it = m.begin(); it != m.end(); ++it) {
+        if (!first) result += ",";
+        result += "\\"" + std::to_string(it->first) + "\\":" + std::to_string(it->second);
+        first = false;
+    }
+    result += "}";
+    return result;
+}
+
+template <typename K, typename V>
+inline std::string __unordered_map_to_json__(const std::unordered_map<K, V>& m) {
+    std::string result = "{";
+    bool first = true;
+    for (auto it = m.begin(); it != m.end(); ++it) {
+        if (!first) result += ",";
+        result += "\\"" + std::to_string(it->first) + "\\":" + std::to_string(it->second);
+        first = false;
+    }
+    result += "}";
+    return result;
+}
+
+inline void __emit_map_change__(const std::string& var, const std::string& map_json) {
+    __tracer__::__step_id__++;
+    std::cout << "{";
+    std::cout << "\\"type\\":\\"map_change\\"";
+    std::cout << ",\\"step_id\\":" << __tracer__::__step_id__;
+    std::cout << ",\\"line\\":" << __LINE__;
+    std::cout << ",\\"function\\":\\"" << __tracer__::__current_function__ << "\\"";
+    std::cout << ",\\"call_stack\\":[";
+    for (size_t i = 0; i < __tracer__::__call_stack__.size(); i++) {
+        std::cout << "\\"" << __tracer__::__call_stack__[i] << "\\"";
+        if (i < __tracer__::__call_stack__.size() - 1) std::cout << ",";
+    }
+    std::cout << "],\\"var\\":\\"" << var << "\\",\\"value\\":" << map_json << "}" << std::endl;
+}
+
+#define TRACE_MAP_CHANGE(var_name, map_obj) \\
+    __emit_map_change__(#var_name, __map_to_json__(map_obj))
+
+#define TRACE_UNORDERED_MAP_CHANGE(var_name, map_obj) \\
+    __emit_map_change__(#var_name, __unordered_map_to_json__(map_obj))
+
+#define TRACE_MAP_INSERT(var_name, map_obj, key, value) \\
+    map_obj[key] = value; \\
+    TRACE_MAP_CHANGE(var_name, map_obj)
+
+#define TRACE_MAP_ERASE(var_name, map_obj, key) \\
+    map_obj.erase(key); \\
+    TRACE_MAP_CHANGE(var_name, map_obj)
+
+#define TRACE_UNORDERED_MAP_INSERT(var_name, map_obj, key, value) \\
+    map_obj[key] = value; \\
+    TRACE_UNORDERED_MAP_CHANGE(var_name, map_obj)
+
+#define TRACE_UNORDERED_MAP_ERASE(var_name, map_obj, key) \\
+    map_obj.erase(key); \\
+    TRACE_UNORDERED_MAP_CHANGE(var_name, map_obj)
 
 #define TRACK_FUNCTION_ENTRY(f) \\
     __tracer__::__current_function__ = f; \\

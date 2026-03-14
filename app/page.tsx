@@ -8,47 +8,72 @@ import { parseExecutionTrace, ExecutionTrace } from '@/lib/cpp/parser';
 import { ExecutionVisualizer } from '@/components/visualizer/ExecutionVisualizer';
 
 export default function HomePage() {
-  const [code, setCode] = useState(`#include<iostream>
-#include "tracer.hpp"
-using namespace std;
+  const [code, setCode] = useState(`int maxArea(vector<int>& height) {
+    int area_max = 0;
+    int i = 0;
+    int j = height.size() - 1;
 
-int main(){
-    TRACE_INT(red, 10);
-    
-    for(TRACE_INT(i, 0); i < 5; i++){
-        TRACE_LINE();
+    while (i < j) {
+        int current_height = min(height[i], height[j]);
+        int current_width = j - i;
+        int current_area = current_height * current_width;
         
-        if(i % 2 == 0){
-            red = 20;
+        if (current_area > area_max) {
+            int updated_max = current_area;
+            area_max = updated_max;
         }
-        else{
-            red = 30;
+        
+        if (height[i] < height[j]) {
+            i++;
+        } else {
+            j--;
         }
     }
-    
-    return 0;
+
+    return area_max;
 }`);
   const [output, setOutput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [executionTrace, setExecutionTrace] = useState<ExecutionTrace | null>(null);
+  const [autoTrace, setAutoTrace] = useState(true);
 
   const handleRun = async () => {
     setIsLoading(true);
     setExecutionTrace(null);
-    setOutput("Running code in browser...");
+    setOutput("Converting and tracing your code...");
 
     try {
-      const result: RunResult = await runCppInBrowser(code);
+      // Send to automatic tracer API
+      const response = await fetch('/api/trace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
 
-      if (result.stderr && result.exitCode !== 0) {
-        setOutput(`❌ COMPILATION ERROR:\n${result.stderr}`);
-      } else if (result.error) {
-        setOutput(`❌ ERROR: ${result.error}`);
-      } else if (result.stdout) {
-        setOutput(result.stdout);
+      const data = await response.json();
+
+      if (!data.success) {
+        setOutput(`❌ ERROR: ${data.message}\n${data.stderr || ''}`);
+      } else if (data.trace && Array.isArray(data.trace)) {
+        setOutput(`✅ Successfully traced! Generated ${data.trace.length} trace events\n\n${data.stdout?.slice(0, 500) || ''}`);
         
-        // Parse the execution trace
-        const trace = parseExecutionTrace(result.stdout);
+        // Convert raw trace events to ExecutionFrame objects
+        const frames: any[] = data.trace.map((event: any, idx: number) => ({
+          step_id: event.step_id || idx,
+          line: event.line || 0,
+          function: event.function || 'main',
+          callStack: event.call_stack || ['main'],
+          variables: new Map([[event.var || '', event.value || 0]]),
+          arrayStates: new Map(),
+          mapStates: new Map(),
+          eventType: event.type || 'step'
+        }));
+        
+        // Create ExecutionTrace with frames property
+        const trace: ExecutionTrace = {
+          frames,
+          totalSteps: frames.length
+        };
         setExecutionTrace(trace);
       } else {
         setOutput("No output");

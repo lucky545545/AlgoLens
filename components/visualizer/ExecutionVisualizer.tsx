@@ -4,6 +4,7 @@ import { ExecutionTrace, getFrameAtStep, getChangedVariables, getMemoryState } f
 import { VariablesPanel } from './VariablesPanel';
 import { CallStackPanel } from './CallStackPanel';
 import { ArrayVisualization } from './ArrayVisualization';
+import { MapVisualization } from './MapVisualization';
 import { StepPlayer } from './StepPlayer';
 
 interface ExecutionVisualizerProps {
@@ -66,24 +67,47 @@ export function ExecutionVisualizer({ trace }: ExecutionVisualizerProps) {
                     )}
                 </div>
 
-                {/* Right: Array Visualizations */}
+                {/* Right: Array and Map Visualizations */}
                 <div className="space-y-4">
-                    {memoryState && memoryState.arrays.length > 0 ? (
-                        <div className="bg-slate-900/20 p-3 rounded border border-slate-700 space-y-3">
-                            <div className="text-xs text-slate-400 uppercase tracking-widest font-bold">
-                                Array States
-                            </div>
-                            {memoryState.arrays.map(({ name, values }) => (
-                                <ArrayVisualization
-                                    key={name}
-                                    name={name}
-                                    values={values}
-                                />
-                            ))}
+                    {memoryState && (memoryState.arrays.length > 0 || memoryState.maps.length > 0) ? (
+                        <div className="bg-slate-900/20 p-3 rounded border border-slate-700 space-y-4">
+                            {memoryState.arrays.length > 0 && (
+                                <div>
+                                    <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-3">
+                                        Array States
+                                    </div>
+                                    <div className="space-y-3">
+                                        {memoryState.arrays.map(({ name, values }) => (
+                                            <ArrayVisualization
+                                                key={name}
+                                                name={name}
+                                                values={values}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {memoryState.maps.length > 0 && (
+                                <div>
+                                    <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-3">
+                                        Map States
+                                    </div>
+                                    <div className="space-y-3">
+                                        {memoryState.maps.map(({ name, entries }) => (
+                                            <MapVisualization
+                                                key={name}
+                                                name={name}
+                                                entries={entries}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="text-slate-500 text-xs italic p-3 bg-slate-900/20 rounded border border-slate-700">
-                            No arrays in scope
+                            No arrays or maps in scope
                         </div>
                     )}
                 </div>

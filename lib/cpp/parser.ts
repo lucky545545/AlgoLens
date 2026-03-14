@@ -3,7 +3,7 @@
 export interface Variable {
     name: string;
     value: any;
-    type: 'primitive' | 'array' | 'object';
+    type: 'primitive' | 'array' | 'map' | 'object';
     lineChanged?: number;
 }
 
@@ -14,7 +14,8 @@ export interface ExecutionFrame {
     callStack: string[];
     variables: Map<string, Variable>;
     arrayStates: Map<string, number[]>;
-    eventType: 'step' | 'var_change' | 'array_change' | 'function_call' | 'function_return' | 'line';
+    mapStates: Map<string, Record<string | number, number>>;
+    eventType: 'step' | 'var_change' | 'array_change' | 'map_change' | 'function_call' | 'function_return' | 'line';
 }
 
 export interface ExecutionTrace {
@@ -27,6 +28,7 @@ export function parseExecutionTrace(stdout: string): ExecutionTrace {
     const frames: ExecutionFrame[] = [];
     const variableStates = new Map<string, Variable>();
     const arrayStates = new Map<string, number[]>();
+    const mapStates = new Map<string, Record<string | number, number>>();
     let currentCallStack: string[] = ['main'];
     
     const lines = stdout.split('\n');
@@ -44,8 +46,65 @@ export function parseExecutionTrace(stdout: string): ExecutionTrace {
             
             // Track variable changes
             if (event.var && event.value !== undefined) {
+                // Check if event type explicitly indicates it's a map
+                if (event.type === 'map_change') {
+                    if (typeof event.value === 'object' && event.value !== null) {
+                        mapStates.set(event.var, event.value);
+                        variableStates.set(event.var, {
+                            name: event.var,
+                            value: event.value,
+                            type: 'map',
+                            lineChanged: event.line
+                        });
+                    }
+                }
+                // Check if it's a map (object with numeric string keys and numeric values)
+                else if (typeof event.value === 'object' && event.value !== null && !Array.isArray(event.value)) {
+                    // Check if it looks like a map (has numeric keys or is empty object from map)
+                    const keys = Object.keys(event.value);
+                    const looksLikeMap = keys.length === 0 || keys.every((k) => /^\d+$/.test(k) && typeof event.value[k] === 'number');
+                    
+                    if (looksLikeMap) {
+                        mapStates.set(event.var, event.value);
+                        variableStates.set(event.var, {
+                            name: event.var,
+                            value: event.value,
+                            type: 'map',
+                            lineChanged: event.line
+                        });
+                    } else {
+                        // Other objects - treat as generic object type
+                        variableStates.set(event.var, {
+                            name: event.var,
+                            value: event.value,
+                            type: 'object',
+                            lineChanged: event.line
+                        });
+                    }
+                }
+                // Check if it's a map JSON string (backup path)
+                else if (typeof event.value === 'string' && event.value.startsWith('{') && event.value.includes(':')) {
+                    try {
+                        const mapObj = JSON.parse(event.value);
+                        mapStates.set(event.var, mapObj);
+                        variableStates.set(event.var, {
+                            name: event.var,
+                            value: mapObj,
+                            type: 'map',
+                            lineChanged: event.line
+                        });
+                    } catch {
+                        // If not valid JSON, treat as primitive
+                        variableStates.set(event.var, {
+                            name: event.var,
+                            value: event.value,
+                            type: 'primitive',
+                            lineChanged: event.line
+                        });
+                    }
+                }
                 // Check if it's an array (starts with '[')
-                if (typeof event.value === 'string' && event.value.startsWith('[')) {
+                else if (typeof event.value === 'string' && event.value.startsWith('[')) {
                     const arrayStr = event.value.slice(1, -1);
                     const arrayValues = arrayStr.split(',').map((v: string) => parseInt(v) || 0);
                     arrayStates.set(event.var, arrayValues);
@@ -73,6 +132,7 @@ export function parseExecutionTrace(stdout: string): ExecutionTrace {
                 callStack: currentCallStack,
                 variables: new Map(variableStates),
                 arrayStates: new Map(arrayStates),
+                mapStates: new Map(mapStates),
                 eventType: event.type || 'step'
             };
             
@@ -133,6 +193,11 @@ export function getMemoryState(trace: ExecutionTrace, stepId: number) {
         arrays: Array.from(frame.arrayStates.entries()).map(([name, values]) => ({
             name,
             values,
+            variable: frame.variables.get(name)
+        })),
+        maps: Array.from(frame.mapStates.entries()).map(([name, entries]) => ({
+            name,
+            entries,
             variable: frame.variables.get(name)
         }))
     };
