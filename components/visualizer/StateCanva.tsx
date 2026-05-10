@@ -1,12 +1,17 @@
 "use client";
 import { motion } from 'framer-motion';
 
-export function StateCanvas({ snapshots }: { snapshots: any[] }) {
+interface Snapshot {
+  var: string;
+  val: string | number | boolean;
+}
+
+export function StateCanvas({ snapshots }: { snapshots: Snapshot[] }) {
   // snapshots = [{ var: "x", val: 10 }, { var: "i", val: 0 }]
   
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-6 p-8">
-      {snapshots.map((data, index) => (
+      {snapshots.map((data) => (
         <motion.div 
           key={data.var}
           layout
@@ -16,7 +21,7 @@ export function StateCanvas({ snapshots }: { snapshots: any[] }) {
             Variable: {data.var}
           </div>
           <motion.div 
-            key={data.val} // Triggers animation on value change
+            key={String(data.val)} // Triggers animation on value change
             initial={{ scale: 1.2, color: "#3b82f6" }}
             animate={{ scale: 1, color: "#ffffff" }}
             className="text-3xl font-bold"

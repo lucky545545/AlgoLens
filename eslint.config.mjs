@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "public/wasm/**",
+    "public/worker/**",
+    "lib/cpp/**/*.exe",
+    "lib/cpp/parser-test.ts",
+    "validate-map-output.js",
   ]),
 ]);
 

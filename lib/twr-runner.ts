@@ -1,6 +1,8 @@
 import { twrWasmModule } from "twr-wasm";
 
-export async function runTwrWasm(wasmPath: string, functionName: string, args: any[] = []) {
+type WasmArg = string | number | bigint | ArrayBuffer;
+
+export async function runTwrWasm(wasmPath: string, functionName: string, args: WasmArg[] = []) {
     // 1. Create a new module instance
     const mod = new twrWasmModule();
 

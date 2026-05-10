@@ -1,5 +1,3 @@
-// src/lib/cpp-worker.ts
-/* eslint-disable no-restricted-globals */
 import { twrWasmModule } from "twr-wasm";
 
 const mod = new twrWasmModule();
@@ -19,10 +17,10 @@ self.onmessage = async (e: MessageEvent) => {
                 stderr: "",
                 exitCode: 0
             });
-        } catch (err: any) {
+        } catch (err) {
             self.postMessage({
                 stdout: "",
-                stderr: err.message,
+                stderr: err instanceof Error ? err.message : "Unknown worker error",
                 exitCode: 1
             });
         }

@@ -1,17 +1,16 @@
-// Safe debugging utility for map visualization
-// Only logs in browser environment and can be toggled on/off
+// Safe debugging utility for map visualization.
+// Only logs in browser development when explicitly enabled.
 
 class MapVisDebugger {
     private enabled: boolean;
     
     constructor() {
-        // Only enable in development and browser environment
         this.enabled = typeof window !== 'undefined' && 
                        process.env.NODE_ENV === 'development' &&
                        localStorage?.getItem('MAP_VIS_DEBUG') === 'true';
     }
     
-    log(message: string, data?: any) {
+    log(message: string, data?: unknown) {
         if (!this.enabled) return;
         
         if (data) {
@@ -21,11 +20,11 @@ class MapVisDebugger {
         }
     }
     
-    logParser(message: string, data?: any) {
+    logParser(message: string, data?: unknown) {
         this.log(`[Parser] ${message}`, data);
     }
     
-    logVisualizer(message: string, data?: any) {
+    logVisualizer(message: string, data?: unknown) {
         this.log(`[Visualizer] ${message}`, data);
     }
     
@@ -33,7 +32,7 @@ class MapVisDebugger {
         if (typeof window !== 'undefined') {
             localStorage.setItem('MAP_VIS_DEBUG', 'true');
             this.enabled = true;
-            console.log('✓ Map Visualization Debugging ENABLED');
+            console.log('Map Visualization Debugging ENABLED');
         }
     }
     
@@ -41,14 +40,9 @@ class MapVisDebugger {
         if (typeof window !== 'undefined') {
             localStorage.removeItem('MAP_VIS_DEBUG');
             this.enabled = false;
-            console.log('✓ Map Visualization Debugging DISABLED');
+            console.log('Map Visualization Debugging DISABLED');
         }
     }
 }
 
 export const mapVisDebug = new MapVisDebugger();
-
-// Usage in browser console:
-// mapVisDebug.enable()  - to start debugging
-// mapVisDebug.disable() - to stop debugging
-// Then refresh the page and you'll see [MapVis] logs

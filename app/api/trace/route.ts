@@ -33,93 +33,82 @@ async function convertCodeToTracedViaPython(rawCode: string): Promise<string> {
 }
 
 function convertCodeToTracedFallback(rawCode: string): string {
-  // Robust fallback tracer macro injection for C++
   let traced = rawCode.trim();
 
-  // 1. Add necessary includes
   if (!traced.includes('#include')) {
     traced = '#include <iostream>\n#include <vector>\n#include <unordered_map>\nusing namespace std;\n' + traced;
   }
+
+  const lines = traced.split('\n');
   
-  if (!traced.includes('#include "tracer.hpp"')) {
-    // Add after other includes
-    const lastIncludeMatch = traced.match(/.*#include[^\n]*\n/s);
-    if (lastIncludeMatch) {
-      const lastIncludePos = lastIncludeMatch[0].length;
-      traced = traced.slice(0, lastIncludePos) + '#include "tracer.hpp"\n' + traced.slice(lastIncludePos);
-    } else {
-      traced = '#include "tracer.hpp"\n' + traced;
-    }
+  const instrumentedLines = lines.map((line, index) => {
+      let modified = line;
+      const ln = index + 1;
+
+      if (/(if|while|for)\s*\(.*?\)\s*\{/.test(modified)) {
+          modified = modified.replace(
+              /(if|while|for)\s*\(.*?\)\s*\{/g,
+              (match) => `${match} _trace("CONDITION", "line_${ln}", true);`
+          );
+      }
+
+      if (!line.includes('for') && !line.includes('while') && !line.includes('if')) {
+          const isDecl = /(int|float|double|char|bool|long|short)\s+([a-zA-Z_]\w*)\s*=?\s*([^;]*);/.test(modified);
+          
+          if (isDecl) {
+              modified = modified.replace(
+                  /(int|float|double|char|bool|long|short)\s+([a-zA-Z_]\w*)\s*=?\s*([^;]*);/g,
+                  (match, type, varName) => `${match} _trace("DECLARATION", "${varName}", ${varName});`
+              );
+          }
+
+          const isVectorDecl = /vector<[a-zA-Z0-9_:]+>\s+([a-zA-Z_]\w*)\s*=?\s*([^;]*);/.test(modified);
+          if (isVectorDecl) {
+              modified = modified.replace(
+                  /vector<[a-zA-Z0-9_:]+>\s+([a-zA-Z_]\w*)\s*=?\s*([^;]*);/g,
+                  (match, varName) => `${match} _trace("DECLARATION", "${varName}", ${varName});`
+              );
+          }
+
+          if (!isDecl && !isVectorDecl && /^\s*([a-zA-Z_]\w*)\s*=\s*([^;]+);/.test(modified)) {
+              modified = modified.replace(
+                  /^(\s*)([a-zA-Z_]\w*)\s*=\s*([^;]+);/g,
+                  (match, indent, varName) => `${match} _trace("ASSIGNMENT", "${varName}", ${varName});`
+              );
+          }
+
+          if (/^\s*([a-zA-Z_]\w*)\[.*?\]\s*(?:\+|-|\*|\/|%|&|\||\^|<<|>>)?=\s*([^;]+);/.test(modified)) {
+              modified = modified.replace(
+                  /^(\s*)([a-zA-Z_]\w*)\[.*?\]\s*(?:\+|-|\*|\/|%|&|\||\^|<<|>>)?=\s*([^;]+);/g,
+                  (match, indent, varName) => `${match} _trace("ASSIGNMENT", "${varName}", ${varName});`
+              );
+          }
+
+          if (/^\s*([a-zA-Z_]\w*)\.push_back\(.*?\);/.test(modified)) {
+              modified = modified.replace(
+                  /^(\s*)([a-zA-Z_]\w*)\.push_back\(.*?\);/g,
+                  (match, indent, varName) => `${match} _trace("ASSIGNMENT", "${varName}", ${varName});`
+              );
+          }
+
+          if (/^\s*([a-zA-Z_]\w*)\((?!.*\)\s*\{).*?\);/.test(modified)) {
+              modified = modified.replace(
+                  /^(\s*)([a-zA-Z_]\w*)\((?!.*\)\s*\{).*?\);/g,
+                  (match, indent, funcName) => `${indent}_trace("CALL", "${funcName}", 0); ${match.trim()}`
+              );
+          }
+      }
+
+      return modified;
+  });
+
+  let result = instrumentedLines.join('\n');
+
+  if (!result.includes('#include "bridge.h"')) {
+      result = '#include "bridge.h"\n' + result;
   }
 
-  // 2. Replace variable declarations with TRACE_INT macros
-  // But ONLY if the variable is being declared (has 'int' or 'long' keyword before it)
-  // Match: type varname = value;
-  traced = traced.replace(
-    /\b(int|long|short|float|double|bool|char|unsigned)\s+(\w+)\s*=\s*([^;{,]+);/gm,
-    (match, type, varName, value) => {
-      // Skip keywords and special identifiers
-      if (['main', 'true', 'false', 'nullptr', 'null'].includes(varName)) return match;
-      const trimmedVal = value.trim();
-      return `TRACE_INT(${varName}, ${trimmedVal});`;
-    }
-  );
-
-  // 3. Handle simple for loops with new declarations
-  // ONLY match: for (int i = 0; i < n; i++)
-  // DON'T match: for (i = 0, j = ...; ...)
-  traced = traced.replace(
-    /for\s*\(\s*(int|long)\s+(\w+)\s*=\s*([^;]+);\s*([^;]+);\s*([^)]+)\)/gm,
-    (match, type, varName, init, condition, increment) => {
-      // Make sure this is a simple for loop, not one with comma-separated inits
-      if (init.includes(',')) {
-        return match; // Skip complex loop initializations
-      }
-      return `for( TRACE_INT(${varName}, ${init.trim()}) ; ${condition.trim()} ; ${increment.trim()} )`;
-    }
-  );
-
-  // 4. Add function entry tracking
-  // Find all function definitions and add TRACK_FUNCTION_ENTRY
-  traced = traced.replace(
-    /(\w+)\s+(\w+)\s*\(\s*([^)]*)\s*\)\s*\{/gm,
-    (match, returnType, funcName, params) => {
-      if (['if', 'while', 'for'].includes(returnType) || funcName.startsWith('TRACE')) {
-        return match;
-      }
-      // Add tracking after opening brace
-      return `${returnType} ${funcName}(${params}) {\n    TRACK_FUNCTION_ENTRY("${funcName}");`;
-    }
-  );
-
-  // 5. Add function exit before returns
-  traced = traced.replace(
-    /\breturn\s+([^;]*);/gm,
-    (match, returnVal) => {
-      if (match.includes('TRACK_FUNCTION_EXIT')) return match;
-      const val = returnVal.trim();
-      return `TRACK_FUNCTION_EXIT();\n    return ${val};`;
-    }
-  );
-
-  // 6. Track simple variable assignments (x = value;)
-  // Skip complex cases
-  traced = traced.replace(
-    /^(\s*)(\w+)\s*=\s*([^;{]+);(?![\s]*TRACE)/gm,
-    (match, indent, varName, value) => {
-      // Skip if already traced
-      if (match.includes('TRACE_INT') || match.includes('TRACK_')) return match;
-      // Skip special cases
-      if (['cout', 'cin', 'return', 'if', 'while', 'for'].includes(varName)) return match;
-      // Skip if value is complex (contains parentheses or other operators)
-      if (value.includes('(') || value.includes('[') || value.includes('*') || value.includes('/')) return match;
-      
-      const trimmedVal = value.trim();
-      return `${indent}TRACE_INT(${varName}, ${trimmedVal});`;
-    }
-  );
-
-  return traced;
+  return result;
 }
 
 async function compileAndRun(tracedCode: string, libPath: string): Promise<{ stdout: string; stderr: string }> {
@@ -220,7 +209,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<TraceResp
 
     // Check if code already has tracer macros
     let finalCode = code;
-    if (!code.includes('TRACE_INT') && !code.includes('#include "tracer.hpp"')) {
+    if (!code.includes('_trace') && !code.includes('#include "bridge.h"')) {
       // Auto-convert to traced version
       console.log('Converting code to traced version...');
       finalCode = await convertCodeToTracedViaPython(code);
@@ -230,6 +219,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<TraceResp
 
     // Get the lib/cpp directory path
     const libPath = path.join(process.cwd(), 'lib', 'cpp');
+
+    // Check if code has a main function
+    if (!finalCode.match(/\bmain\s*\(/)) {
+      return NextResponse.json(
+        {
+          success: false,
+          stderr: "Error: No 'main' function found. C++ programs require a main() entry point to execute.",
+          message: 'Missing main function'
+        },
+        { status: 400 }
+      );
+    }
 
     // Compile and run
     console.log('Compiling and running...');
